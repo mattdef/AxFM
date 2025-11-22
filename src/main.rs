@@ -37,9 +37,6 @@ fn build_fm(app: &Application) {
     let home_path = gio::File::for_path(glib::home_dir());
     let fmstate = Rc::new(RefCell::new(state::FmState::new(home_path.clone())));
 
-    // implement all actions for the headerbar
-    headerbar::implement_actions(&window, &app, fmstate.clone());
-
     let (files_scroll, files_list, list_view) = files_panel::build_files_panel(fmstate.clone());
     let (sidebar_box, sidebar_selection) = sidebar::build_sidebar(fmstate.clone(), &files_list);
     let path_bar = pathbar::build_pathbar(&mut fmstate.borrow_mut());
@@ -48,6 +45,9 @@ fn build_fm(app: &Application) {
     let empty_area_menu = popup_menu::get_empty_right_click(&content_area, fmstate.clone());
     let file_area_menu =
         popup_menu::get_file_right_click(&content_area, fmstate.clone(), &files_list);
+
+    // implement all actions for the headerbar
+    headerbar::implement_actions(&window, &app, fmstate.clone(), &files_list);
 
     files_panel::populate_files_list(
         &files_list,

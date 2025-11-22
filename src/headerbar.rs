@@ -4,7 +4,8 @@ use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, MenuButton, ApplicationWindow, Application};
 use std::cell::RefCell;
 use std::rc::Rc;
-use gtk4::glib;
+use gtk4::{glib, gio};
+use crate::files_panel;
 
 pub fn build_headerbar() -> GtkBox {
     let headerbar = GtkBox::new(gtk4::Orientation::Horizontal, 6);
@@ -37,16 +38,24 @@ pub fn build_headerbar() -> GtkBox {
     headerbar
 }
 
-pub fn implement_actions(window: &ApplicationWindow, app: &Application, fmstate: Rc<RefCell<FmState>>) {
+pub fn implement_actions(window: &ApplicationWindow, app: &Application, fmstate: Rc<RefCell<FmState>>, files_list: &gtk4::StringList) {
     // Show Hidden Files action
     let show_hidden_initial = fmstate.borrow().settings.show_hidden;
     let show_hidden_action =
         SimpleAction::new_stateful("show_hidden", None, &show_hidden_initial.into());
 
-    show_hidden_action.connect_activate(glib::clone!(#[strong] fmstate, move |action, _| {
+    show_hidden_action.connect_activate(glib::clone!(#[strong] fmstate, #[weak] files_list, move |action, _| {
         let current: bool = action.state().unwrap().get().unwrap();
         action.set_state(&(!current).into());
-        fmstate.borrow_mut().settings.show_hidden = !current;
+
+        let mut fmstate_mut = fmstate.borrow_mut();
+        fmstate_mut.settings.show_hidden = !current;
+
+        files_panel::populate_files_list(
+            &files_list,
+            &fmstate_mut.current_path,
+            &fmstate_mut.settings.show_hidden,
+        );
     }));
 
     window.add_action(&show_hidden_action);
