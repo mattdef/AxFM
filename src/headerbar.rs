@@ -1,11 +1,11 @@
+use crate::files_panel;
 use crate::state::FmState;
 use gtk4::gio::{Menu, SimpleAction};
+use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{Box as GtkBox, MenuButton, ApplicationWindow, Application};
+use gtk4::{Application, ApplicationWindow, Box as GtkBox, MenuButton};
 use std::cell::RefCell;
 use std::rc::Rc;
-use gtk4::{glib, gio};
-use crate::files_panel;
 
 pub fn build_headerbar() -> GtkBox {
     let headerbar = GtkBox::new(gtk4::Orientation::Horizontal, 6);
@@ -38,38 +38,57 @@ pub fn build_headerbar() -> GtkBox {
     headerbar
 }
 
-pub fn implement_actions(window: &ApplicationWindow, app: &Application, fmstate: Rc<RefCell<FmState>>, files_list: &gtk4::StringList) {
+pub fn implement_actions(
+    window: &ApplicationWindow,
+    app: &Application,
+    fmstate: Rc<RefCell<FmState>>,
+    files_list: &gtk4::StringList,
+) {
     // Show Hidden Files action
     let show_hidden_initial = fmstate.borrow().settings.show_hidden;
     let show_hidden_action =
         SimpleAction::new_stateful("show_hidden", None, &show_hidden_initial.into());
 
-    show_hidden_action.connect_activate(glib::clone!(#[strong] fmstate, #[weak] files_list, move |action, _| {
-        let current: bool = action.state().unwrap().get().unwrap();
-        action.set_state(&(!current).into());
+    show_hidden_action.connect_activate(glib::clone!(
+        #[strong]
+        fmstate,
+        #[weak]
+        files_list,
+        move |action, _| {
+            let current: bool = action.state().unwrap().get().unwrap();
+            action.set_state(&(!current).into());
 
-        let mut fmstate_mut = fmstate.borrow_mut();
-        fmstate_mut.settings.show_hidden = !current;
+            let mut fmstate_mut = fmstate.borrow_mut();
+            fmstate_mut.settings.show_hidden = !current;
 
-        files_panel::populate_files_list(
-            &files_list,
-            &fmstate_mut.current_path,
-            &fmstate_mut.settings.show_hidden,
-        );
-    }));
+            files_panel::populate_files_list(
+                &files_list,
+                &fmstate_mut.current_path,
+                &fmstate_mut.settings.show_hidden,
+            );
+        }
+    ));
 
     window.add_action(&show_hidden_action);
 
     let new_window_action = SimpleAction::new("open_new_window", None);
-    new_window_action.connect_activate(glib::clone!(#[weak] app, move |_, _| {
-        crate::build_fm(&app);
-    }));
+    new_window_action.connect_activate(glib::clone!(
+        #[weak]
+        app,
+        move |_, _| {
+            crate::build_fm(&app);
+        }
+    ));
     window.add_action(&new_window_action);
 
     let close_window_action = SimpleAction::new("close_window", None);
-    close_window_action.connect_activate(glib::clone!(#[weak] window, move |_, _| {
-        window.close();
-    }));
+    close_window_action.connect_activate(glib::clone!(
+        #[weak]
+        window,
+        move |_, _| {
+            window.close();
+        }
+    ));
     window.add_action(&close_window_action);
 
     let undo_action = SimpleAction::new("undo_history", None);

@@ -127,8 +127,8 @@ fn build_fm(app: &Application) {
                     gio::File::for_uri(&file_str)
                 };
 
-                let file_type = file
-                    .query_file_type(gio::FileQueryInfoFlags::NONE, None::<&gio::Cancellable>);
+                let file_type =
+                    file.query_file_type(gio::FileQueryInfoFlags::NONE, None::<&gio::Cancellable>);
 
                 if file_type == gio::FileType::Directory {
                     files_panel::populate_files_list(

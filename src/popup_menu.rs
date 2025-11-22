@@ -1,3 +1,4 @@
+use crate::files_panel;
 use crate::state::FmState;
 use gtk4::prelude::*;
 use gtk4::{
@@ -224,7 +225,18 @@ pub fn get_file_right_click(
                             let text = obj.string();
 
                             match text.as_str() {
-                                "Open File" => println!("Open File clicked"),
+                                "Open File" => {
+                                    if let Some(path) = &fmstate.borrow().popup_focused_file {
+                                        if let Err(err) =
+                                            Command::new("xdg-open").arg(path).spawn()
+                                        {
+                                            eprintln!(
+                                                "Failed to open file '{}': {}",
+                                                &path, err
+                                            );
+                                        }
+                                    }
+                                },
                                 "Open in Terminal" => {
                                     let terminal_cmd = env::var("TERMINAL")
                                         .unwrap_or_else(|_| "xterm".to_string());
@@ -260,7 +272,60 @@ pub fn get_file_right_click(
                                     }
                                 }
                                 "Rename..." => {
-                                    println!("Renaming file...");
+                                    if let Some(path) = &fmstate.borrow().popup_focused_file {
+                                        let file = gio::File::for_path(path.as_str());
+                                        let file_name: String = file
+                                            .basename()
+                                            .and_then(|name| name.to_str().map(|s| s.to_owned()))
+                                            .unwrap_or_default();
+
+                                        let dialog = gtk4::Dialog::builder()
+                                                .title("Enter new file name")
+                                                .modal(true)
+                                                .build();
+
+                                        let content_area = dialog.content_area();
+                                        let entry = gtk4::Entry::new();
+                                        entry.set_text(&file_name);
+                                        content_area.append(&entry);
+
+                                        let ok_button = dialog.add_button("OK", gtk4::ResponseType::Ok);
+                                        let cancel_button = dialog.add_button("Cancel", gtk4::ResponseType::Cancel);
+
+                                        let file_clone = file.clone();
+
+                                        dialog.connect_response(move |dialog, response| {
+                                            if response == gtk4::ResponseType::Ok {
+                                                let new_name = entry.text();
+
+                                                if let Some(parent) = file_clone.parent() {
+                                                    let new_file = parent.child(&new_name);
+                                                    match file_clone.move_(&new_file, gio::FileCopyFlags::NONE, None::<&gio::Cancellable>, None) {
+                                                        Ok(_) => {
+                                                            if let Some(selection_model) = files_list.model().and_then(|m| m.downcast::<gtk4::SingleSelection>().ok()) {
+                                                                for i in 0..selection_model.n_items() {
+                                                                    if let Some(item) = selection_model.item(i) {
+                                                                        if let Some(obj) = item.downcast_ref::<gtk4::StringObject>() {
+                                                                            if obj.string() == file_name {
+                                                                                obj.set_string(&new_name);
+                                                                                break;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        Err(err) => eprintln!("Failed to rename file: {}", err),
+                                                    }
+                                                } else {
+                                                    eprintln!("Cannot rename file without a parent directory");
+                                                }
+                                            }
+                                            dialog.close();
+                                        });
+
+                                        dialog.show();
+                                    }
                                 }
                                 _ => {}
                             }
