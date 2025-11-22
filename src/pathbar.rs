@@ -1,8 +1,5 @@
 use crate::state::FmState;
-use gtk4::gio;
-use gtk4::glib::Type;
-use gtk4::prelude::*;
-use gtk4::{Entry, EntryCompletion, ListStore};
+use gtk4::{Entry, EntryCompletion, ListStore, gio, glib::Type, prelude::*};
 
 pub fn build_pathbar(fmstate: &mut FmState) -> Entry {
     let pathbar = Entry::new();

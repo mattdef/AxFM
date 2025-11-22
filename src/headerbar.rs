@@ -1,11 +1,11 @@
-use crate::files_panel;
-use crate::state::FmState;
-use gtk4::gio::{Menu, SimpleAction};
-use gtk4::glib;
-use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow, Box as GtkBox, MenuButton};
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::{files_panel, state::FmState};
+use gtk4::{
+    Application, ApplicationWindow, Box as GtkBox, MenuButton,
+    gio::{Menu, SimpleAction},
+    glib,
+    prelude::*,
+};
+use std::{cell::RefCell, rc::Rc};
 
 pub fn build_headerbar() -> GtkBox {
     let headerbar = GtkBox::new(gtk4::Orientation::Horizontal, 6);

@@ -1,15 +1,9 @@
-use crate::files_panel;
-use crate::state::FmState;
-use gtk4::prelude::*;
+use crate::{files_panel, state::FmState};
 use gtk4::{
     Box as GtkBox, Label, ListView, Popover, SignalListItemFactory, SingleSelection, StringList,
+    gio, glib, prelude::*,
 };
-use gtk4::{gio, glib};
-use std::cell::RefCell;
-use std::env;
-use std::path::Path;
-use std::process::Command;
-use std::rc::Rc;
+use std::{cell::RefCell, env, path::Path, process::Command, rc::Rc};
 
 struct MenuItem<'a> {
     label: &'a str,

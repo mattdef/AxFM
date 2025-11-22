@@ -4,11 +4,8 @@
 //! if once registered. If this functionality is needed, the
 //! `track_widget_cleanup` function can be used.
 
-use gtk4::Widget;
-use gtk4::prelude::*;
-use std::any::Any;
-use std::cell::RefCell;
-use std::collections::HashMap;
+use gtk4::{Widget, prelude::*};
+use std::{any::Any, cell::RefCell, collections::HashMap};
 
 thread_local! {
     static WIDGET_DATA: RefCell<HashMap<usize, HashMap<String, Box<dyn Any>>>> = RefCell::new(HashMap::new());

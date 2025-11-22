@@ -1,6 +1,5 @@
 use crate::utils::FMSettings;
-use gtk4::gio;
-use gtk4::glib::GString;
+use gtk4::{gio, glib::GString};
 
 pub struct FmState {
     pub current_path: gio::File,

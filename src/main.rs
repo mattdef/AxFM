@@ -7,11 +7,11 @@ mod state;
 mod style;
 mod utils;
 
-use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow, Box as GtkBox, GestureClick, Orientation, Paned};
-use gtk4::{gio, glib};
-use std::cell::RefCell;
-use std::rc::Rc;
+use gtk4::{
+    Application, ApplicationWindow, Box as GtkBox, GestureClick, Orientation, Paned, gio, glib,
+    prelude::*,
+};
+use std::{cell::RefCell, rc::Rc};
 
 const APP_ID: &str = "org.filemanager.axfm";
 

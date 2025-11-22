@@ -1,16 +1,13 @@
-use crate::state::FmState;
-use crate::utils::WidgetDataExt;
-use gtk4::gio;
-use gtk4::gio::ThemedIcon;
-use gtk4::prelude::*;
+use crate::{state::FmState, utils::WidgetDataExt};
 use gtk4::{
     DragIcon, DragSource, EventControllerMotion, ListView, ScrolledWindow, SignalListItemFactory,
-    SingleSelection, StringList,
+    SingleSelection, StringList, gdk, gio, gio::ThemedIcon, glib, prelude::*,
 };
-use gtk4::{gdk, glib};
-use std::cell::RefCell;
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 pub fn build_files_panel(fmstate: Rc<RefCell<FmState>>) -> (ScrolledWindow, StringList, ListView) {
     let files_list = StringList::new(&[]);

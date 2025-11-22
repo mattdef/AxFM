@@ -1,13 +1,9 @@
-use crate::glib::UserDirectory;
-use crate::state::FmState;
-use gtk4::prelude::*;
+use crate::{glib::UserDirectory, state::FmState};
 use gtk4::{
     Box as GtkBox, ListView, Orientation, ScrolledWindow, SignalListItemFactory, SingleSelection,
-    StringList,
+    StringList, gdk, gio, glib, prelude::*,
 };
-use gtk4::{gdk, gio, glib};
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 pub fn build_sidebar(
     fmstate: Rc<RefCell<FmState>>,
