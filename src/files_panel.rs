@@ -135,6 +135,7 @@ pub fn build_files_panel(fmstate: Rc<RefCell<FmState>>) -> (ScrolledWindow, Stri
                 label.set_text(info.display_name().as_str());
             } else {
                 label.set_text(&obj.string());
+                icon.set_icon_name(Some("gtk-missing-image"));
             }
 
             // add drop target
