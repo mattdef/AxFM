@@ -1,4 +1,5 @@
-use crate::{files_panel, state::FmState};
+use crate::state::FmState;
+use crate::files_panel;
 use gtk4::{
     Box as GtkBox, Label, ListView, Popover, SignalListItemFactory, SingleSelection, StringList,
     gio, glib, prelude::*,
@@ -140,6 +141,24 @@ pub fn get_file_right_click(
                         show_if_dir: false,
                     }),
                     Rc::new(MenuItem {
+                        label: "Cut",
+                        icon_name: "edit-cut-symbolic",
+                        show_if_file: true,
+                        show_if_dir: true,
+                    }),
+                    Rc::new(MenuItem {
+                        label: "Copy",
+                        icon_name: "edit-copy-symbolic",
+                        show_if_file: true,
+                        show_if_dir: true,
+                    }),
+                    Rc::new(MenuItem {
+                        label: "Paste",
+                        icon_name: "edit-paste-symbolic",
+                        show_if_file: true,
+                        show_if_dir: true,
+                    }),
+                    Rc::new(MenuItem {
                         label: "Move to Trash",
                         icon_name: "user-trash-symbolic",
                         show_if_file: true,
@@ -221,16 +240,15 @@ pub fn get_file_right_click(
                             match text.as_str() {
                                 "Open File" => {
                                     if let Some(path) = &fmstate.borrow().popup_focused_file {
-                                        if let Err(err) =
-                                            Command::new("xdg-open").arg(path).spawn()
+                                        if let Err(err) = Command::new("xdg-open").arg(path).spawn()
                                         {
-                                            eprintln!(
-                                                "Failed to open file '{}': {}",
-                                                &path, err
-                                            );
+                                            eprintln!("Failed to open file '{}': {}", &path, err);
                                         }
                                     }
-                                },
+                                }
+                                "Cut" => {}
+                                "Copy" => {}
+                                "Paste" => {}
                                 "Open in Terminal" => {
                                     let terminal_cmd = env::var("TERMINAL")
                                         .unwrap_or_else(|_| "xterm".to_string());
@@ -266,59 +284,22 @@ pub fn get_file_right_click(
                                     }
                                 }
                                 "Rename..." => {
-                                    if let Some(path) = &fmstate.borrow().popup_focused_file {
-                                        let file = gio::File::for_path(path.as_str());
-                                        let file_name: String = file
-                                            .basename()
-                                            .and_then(|name| name.to_str().map(|s| s.to_owned()))
-                                            .unwrap_or_default();
-
-                                        let dialog = gtk4::Dialog::builder()
-                                                .title("Enter new file name")
-                                                .modal(true)
-                                                .build();
-
-                                        let content_area = dialog.content_area();
-                                        let entry = gtk4::Entry::new();
-                                        entry.set_text(&file_name);
-                                        content_area.append(&entry);
-
-                                        let ok_button = dialog.add_button("OK", gtk4::ResponseType::Ok);
-                                        let cancel_button = dialog.add_button("Cancel", gtk4::ResponseType::Cancel);
-
-                                        let file_clone = file.clone();
-
-                                        dialog.connect_response(move |dialog, response| {
-                                            if response == gtk4::ResponseType::Ok {
-                                                let new_name = entry.text();
-
-                                                if let Some(parent) = file_clone.parent() {
-                                                    let new_file = parent.child(&new_name);
-                                                    match file_clone.move_(&new_file, gio::FileCopyFlags::NONE, None::<&gio::Cancellable>, None) {
-                                                        Ok(_) => {
-                                                            if let Some(selection_model) = files_list.model().and_then(|m| m.downcast::<gtk4::SingleSelection>().ok()) {
-                                                                for i in 0..selection_model.n_items() {
-                                                                    if let Some(item) = selection_model.item(i) {
-                                                                        if let Some(obj) = item.downcast_ref::<gtk4::StringObject>() {
-                                                                            if obj.string() == file_name {
-                                                                                obj.set_string(&new_name);
-                                                                                break;
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                        Err(err) => eprintln!("Failed to rename file: {}", err),
-                                                    }
-                                                } else {
-                                                    eprintln!("Cannot rename file without a parent directory");
-                                                }
-                                            }
-                                            dialog.close();
-                                        });
-
-                                        dialog.show();
+                                    let fmstate_brw = fmstate.borrow();
+                                    if let Some(path) = &fmstate_brw.popup_focused_file {
+                                        let file = gio::File::for_path(path);
+                                        let current_path = &fmstate_brw.current_path;
+                                        let show_hidden = fmstate_brw.settings.show_hidden;
+                                        rename_file_dialog(
+                                            popover
+                                                .root()
+                                                .unwrap()
+                                                .downcast_ref::<gtk4::Window>()
+                                                .unwrap(),
+                                            &file,
+                                            &files_list,
+                                            &current_path,
+                                            show_hidden
+                                        );
                                     }
                                 }
                                 _ => {}
@@ -338,4 +319,65 @@ pub fn get_file_right_click(
     ));
 
     popover
+}
+
+fn rename_file_dialog(
+    parent_window: &gtk4::Window,
+    file_path: &gio::File,
+    files_list: &gtk4::StringList,
+    current_path: &gio::File,
+    show_hidden: bool
+) {
+    let file_name: String = file_path
+        .basename()
+        .and_then(|name| name.to_str().map(|s| s.to_owned()))
+        .unwrap_or_default();
+
+    let dialog = gtk4::Dialog::builder().title("Enter new file name").modal(true).build();
+
+    let content_area = dialog.content_area();
+    let entry = gtk4::Entry::new();
+    entry.set_text(&file_name);
+    content_area.append(&entry);
+
+    let ok_button = dialog.add_button("OK", gtk4::ResponseType::Ok);
+    let cancel_button = dialog.add_button("Cancel", gtk4::ResponseType::Cancel);
+
+    let file_clone = file_path.clone();
+
+    dialog.connect_response(glib::clone!(
+        #[weak]
+        files_list,
+        #[weak]
+        current_path,
+        move |dialog, response| {
+            if response == gtk4::ResponseType::Ok {
+                let new_name = entry.text();
+
+                if let Some(parent) = file_clone.parent() {
+                    let new_file = parent.child(&new_name);
+                    match file_clone.move_(
+                        &new_file,
+                        gio::FileCopyFlags::NONE,
+                        None::<&gio::Cancellable>,
+                        None,
+                    ) {
+                        Ok(_) => {
+                            files_panel::populate_files_list(
+                                &files_list,
+                                &current_path,
+                                &show_hidden,
+                            );
+                        }
+                        Err(err) => eprintln!("Failed to rename file: {}", err),
+                    }
+                } else {
+                    eprintln!("Cannot rename file without a parent directory");
+                }
+            }
+            dialog.close();
+        }
+    ));
+
+    dialog.show();
 }
