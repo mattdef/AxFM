@@ -1,5 +1,6 @@
 use crate::utils::FMSettings;
 use gtk4::{gio, glib::GString};
+use std::path::PathBuf;
 
 pub struct FmState {
     pub current_path: gio::File,
@@ -7,6 +8,8 @@ pub struct FmState {
     pub settings: FMSettings,
     pub hovered_file: Option<GString>,
     pub popup_focused_file: Option<GString>,
+    pub clipboard: Vec<PathBuf>,
+    pub clipboard_is_cut: bool,
 }
 
 impl FmState {
@@ -17,6 +20,8 @@ impl FmState {
             settings: FMSettings::new(),
             hovered_file: None,
             popup_focused_file: None,
+            clipboard: Vec::new(),
+            clipboard_is_cut: false,
         }
     }
 
