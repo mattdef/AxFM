@@ -14,7 +14,11 @@ struct MenuItem<'a> {
     show_if_dir: bool,
 }
 
-pub fn get_empty_right_click(content_area: &GtkBox, fmstate: Rc<RefCell<FmState>>, files_list: &gtk4::StringList) -> Popover {
+pub fn get_empty_right_click(
+    content_area: &GtkBox,
+    fmstate: Rc<RefCell<FmState>>,
+    files_list: &gtk4::StringList,
+) -> Popover {
     let popover = Popover::new();
     popover.set_parent(content_area);
 
@@ -93,9 +97,7 @@ pub fn get_empty_right_click(content_area: &GtkBox, fmstate: Rc<RefCell<FmState>
 
                 match text.as_str() {
                     "New Folder" => println!("New Folder clicked"),
-                    "Paste" => {
-                        paste_function(fmstate.clone(), &files_list)
-                    }
+                    "Paste" => paste_function(fmstate.clone(), &files_list),
                     "Open Terminal Here" => {
                         let terminal_cmd =
                             env::var("TERMINAL").unwrap_or_else(|_| "xterm".to_string());
@@ -281,9 +283,7 @@ pub fn get_file_right_click(
                                         fmstate_mut.clipboard_is_cut = false;
                                     }
                                 }
-                                "Paste" => {
-                                    paste_function(fmstate.clone(), &files_list)
-                                }
+                                "Paste" => paste_function(fmstate.clone(), &files_list),
                                 "Open in Terminal" => {
                                     let terminal_cmd = env::var("TERMINAL")
                                         .unwrap_or_else(|_| "xterm".to_string());
@@ -428,34 +428,18 @@ fn paste_function(fmstate: Rc<RefCell<FmState>>, files_list: &gtk4::StringList) 
     let mut state = fmstate.borrow_mut();
     for src_path in &state.clipboard {
         let src_file = gio::File::for_path(src_path);
-        let dest_file = state
-            .current_path
-            .child(src_path.file_name().unwrap().to_str().unwrap());
+        let dest_file = state.current_path.child(src_path.file_name().unwrap().to_str().unwrap());
 
         let flags = gio::FileCopyFlags::OVERWRITE;
 
         let result = if state.clipboard_is_cut {
-            src_file.move_(
-                &dest_file,
-                flags,
-                None::<&gio::Cancellable>,
-                None,
-            )
+            src_file.move_(&dest_file, flags, None::<&gio::Cancellable>, None)
         } else {
-            src_file.copy(
-                &dest_file,
-                flags,
-                None::<&gio::Cancellable>,
-                None,
-            )
+            src_file.copy(&dest_file, flags, None::<&gio::Cancellable>, None)
         };
 
         if let Err(e) = result {
-            eprintln!(
-                "Failed to paste {}: {}",
-                src_path.display(),
-                e
-            );
+            eprintln!("Failed to paste {}: {}", src_path.display(), e);
         }
     }
 
@@ -464,9 +448,5 @@ fn paste_function(fmstate: Rc<RefCell<FmState>>, files_list: &gtk4::StringList) 
         state.clipboard_is_cut = false;
     }
 
-    files_panel::populate_files_list(
-        &files_list,
-        &state.current_path,
-        &state.settings.show_hidden,
-    );
+    files_panel::populate_files_list(&files_list, &state.current_path, &state.settings.show_hidden);
 }

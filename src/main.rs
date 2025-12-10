@@ -42,7 +42,8 @@ fn build_fm(app: &Application) {
     let path_bar = pathbar::build_pathbar(&mut fmstate.borrow_mut());
 
     // right click menus
-    let empty_area_menu = popup_menu::get_empty_right_click(&content_area, fmstate.clone(), &files_list);
+    let empty_area_menu =
+        popup_menu::get_empty_right_click(&content_area, fmstate.clone(), &files_list);
     let file_area_menu =
         popup_menu::get_file_right_click(&content_area, fmstate.clone(), &files_list, &list_view);
 
