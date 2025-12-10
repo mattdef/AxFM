@@ -43,6 +43,7 @@ pub fn implement_actions(
     app: &Application,
     fmstate: Rc<RefCell<FmState>>,
     files_list: &gtk4::StringList,
+    sidebar_selection: &gtk4::SingleSelection,
 ) {
     // Show Hidden Files action
     let show_hidden_initial = fmstate.borrow().settings.show_hidden;
@@ -92,14 +93,30 @@ pub fn implement_actions(
     window.add_action(&close_window_action);
 
     let undo_action = SimpleAction::new("undo_history", None);
-    undo_action.connect_activate(move |_, _| {
-        println!("Undo triggered");
-    });
+    undo_action.connect_activate(glib::clone!(#[strong] fmstate, #[weak] files_list, #[weak] sidebar_selection, move |_, _| {
+        let mut fmstate_mut = fmstate.borrow_mut();
+        if let Some(file) = fmstate_mut.go_back_in_history() {
+            files_panel::populate_files_list(
+                &files_list,
+                &file,
+                &fmstate_mut.settings.show_hidden,
+            );
+            sidebar_selection.unselect_all();
+        }
+    }));
     window.add_action(&undo_action);
 
     let redo_action = SimpleAction::new("redo_history", None);
-    redo_action.connect_activate(move |_, _| {
-        println!("Redo triggered");
-    });
+    redo_action.connect_activate(glib::clone!(#[strong] fmstate, #[weak] files_list, #[weak] sidebar_selection, move |_, _| {
+        let mut fmstate_mut = fmstate.borrow_mut();
+        if let Some(file) = fmstate_mut.go_forward_in_history() {
+            files_panel::populate_files_list(
+                &files_list,
+                &file,
+                &fmstate_mut.settings.show_hidden,
+            ); 
+            sidebar_selection.unselect_all();
+        }
+    }));
     window.add_action(&redo_action);
 }

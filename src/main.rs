@@ -47,7 +47,7 @@ fn build_fm(app: &Application) {
         popup_menu::get_file_right_click(&content_area, fmstate.clone(), &files_list, &list_view);
 
     // implement all actions for the headerbar
-    headerbar::implement_actions(&window, &app, fmstate.clone(), &files_list);
+    headerbar::implement_actions(&window, &app, fmstate.clone(), &files_list, &sidebar_selection);
 
     files_panel::populate_files_list(
         &files_list,
@@ -77,6 +77,7 @@ fn build_fm(app: &Application) {
                     &fmstate_mut.settings.show_hidden,
                 );
                 fmstate_mut.set_path(file.clone());
+                fmstate_mut.update_history(file.clone());
             }
         }
     ));
@@ -103,7 +104,10 @@ fn build_fm(app: &Application) {
                 &fmstate.borrow().settings.show_hidden,
             );
 
-            fmstate.borrow_mut().set_path(file);
+            let mut fmstate_mut = fmstate.borrow_mut();
+
+            fmstate_mut.set_path(file.clone());
+            fmstate_mut.update_history(file);
             sidebar_selection.unselect_all();
         }
     ));
@@ -136,7 +140,11 @@ fn build_fm(app: &Application) {
                         &file,
                         &fmstate.borrow().settings.show_hidden,
                     );
-                    fmstate.borrow_mut().set_path(file.clone());
+
+                    let mut fmstate_mut = fmstate.borrow_mut();
+
+                    fmstate_mut.set_path(file.clone());
+                    fmstate_mut.update_history(file.clone());
                     sidebar_selection.unselect_all();
                 }
             }

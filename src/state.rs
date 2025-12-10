@@ -10,10 +10,15 @@ pub struct FmState {
     pub popup_focused_file: Option<GString>,
     pub clipboard: Vec<PathBuf>,
     pub clipboard_is_cut: bool,
+    pub history: Vec<gio::File>,
+    pub history_index: usize,
 }
 
 impl FmState {
     pub fn new(current_path: gio::File) -> Self {
+        let mut history = Vec::new();
+        history.push(current_path.clone());
+
         Self {
             current_path,
             on_path_changed: Vec::new(),
@@ -22,6 +27,8 @@ impl FmState {
             popup_focused_file: None,
             clipboard: Vec::new(),
             clipboard_is_cut: false,
+            history,
+            history_index: 0,
         }
     }
 
@@ -34,5 +41,36 @@ impl FmState {
 
     pub fn connect_path_changed<F: Fn(&gio::File) + 'static>(&mut self, f: F) {
         self.on_path_changed.push(Box::new(f));
+    }
+
+    pub fn update_history(&mut self, file: gio::File) {
+        if self.history_index + 1 < self.history.len() {
+            self.history.truncate(self.history_index + 1);
+        }
+
+        self.history.push(file);
+        self.history_index = self.history.len() - 1;
+    }
+
+    pub fn go_back_in_history(&mut self) -> Option<gio::File> {
+        if self.history_index == 0 {
+            return None;
+        }
+
+        self.history_index -= 1;
+        let file = self.history[self.history_index].clone();
+        self.set_path(file.clone());
+        Some(file)
+    }
+
+    pub fn go_forward_in_history(&mut self) -> Option<gio::File> {
+        if self.history_index + 1 >= self.history.len() {
+            return None;
+        }
+
+        self.history_index += 1;
+        let file = self.history[self.history_index].clone();
+        self.set_path(file.clone());
+        Some(file)
     }
 }
