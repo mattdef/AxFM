@@ -1,4 +1,5 @@
 mod files_panel;
+mod footer_bar;
 mod headerbar;
 mod pathbar;
 mod popup_menu;
@@ -37,7 +38,8 @@ fn build_fm(app: &Application) {
     let home_path = gio::File::for_path(glib::home_dir());
     let fmstate = Rc::new(RefCell::new(state::FmState::new(home_path.clone())));
 
-    let (files_scroll, files_list, list_view) = files_panel::build_files_panel(fmstate.clone());
+    let (files_scroll, files_list, list_view, files_selection) =
+        files_panel::build_files_panel(fmstate.clone());
     let (sidebar_box, sidebar_selection) = sidebar::build_sidebar(fmstate.clone(), &files_list);
     let path_bar = pathbar::build_pathbar(&mut fmstate.borrow_mut());
 
@@ -208,6 +210,89 @@ fn build_fm(app: &Application) {
     paned.set_resize_start_child(false);
     paned.set_shrink_start_child(false);
 
-    window.set_child(Some(&paned));
+    // Build footer bar
+    let (footer_bar, footer_components) = footer_bar::build_footer_bar();
+
+    // Create main vertical box to hold paned and footer
+    let main_vbox = GtkBox::new(Orientation::Vertical, 0);
+    main_vbox.append(&paned);
+    main_vbox.append(&footer_bar);
+
+    // Store labels in local variables for cloning
+    let left_label = footer_components.left_label.clone();
+    let center_label = footer_components.center_label.clone();
+    let right_label = footer_components.right_label.clone();
+    let files_list_path = files_list.clone();
+
+    // Connect footer updates for path changes
+    fmstate.borrow_mut().connect_path_changed(glib::clone!(
+        #[weak]
+        left_label,
+        #[weak]
+        center_label,
+        #[weak]
+        right_label,
+        #[weak]
+        files_list_path,
+        move |new_path| {
+            // Update disk space
+            footer_bar::update_disk_space(&left_label, new_path);
+
+            // Update item count based on what's actually displayed in the list
+            let count = files_list_path.n_items() as usize;
+            footer_bar::update_item_count(&center_label, count);
+
+            // Clear selection info and default app
+            right_label.set_text("");
+        }
+    ));
+
+    // Clone labels again for selection callback
+    let center_label_sel = footer_components.center_label.clone();
+    let right_label_sel = footer_components.right_label.clone();
+    let files_list_sel = files_list.clone();
+
+    // Connect footer updates for selection changes
+    files_selection.connect_selected_notify(glib::clone!(
+        #[weak]
+        center_label_sel,
+        #[weak]
+        right_label_sel,
+        #[weak]
+        files_list_sel,
+        move |sel| {
+            let idx = sel.selected();
+
+            if idx == gtk4::INVALID_LIST_POSITION {
+                // No selection - show item count based on displayed items
+                let count = files_list_sel.n_items() as usize;
+                footer_bar::update_item_count(&center_label_sel, count);
+                right_label_sel.set_text("");
+            } else {
+                // Selection - show file info
+                if let Some(obj) = files_list_sel.item(idx) {
+                    let string_obj = obj.downcast::<gtk4::StringObject>().unwrap();
+                    let file_str = string_obj.string();
+
+                    let file = if std::path::Path::new(&file_str).exists() {
+                        gio::File::for_path(&file_str)
+                    } else {
+                        gio::File::for_uri(&file_str)
+                    };
+
+                    footer_bar::update_selection_info(&center_label_sel, &file);
+                    footer_bar::update_default_app(&right_label_sel, &file);
+                }
+            }
+        }
+    ));
+
+    // Initialize footer with current state
+    let current_path = fmstate.borrow().current_path.clone();
+    footer_bar::update_disk_space(&footer_components.left_label, &current_path);
+    let count = footer_bar::count_items(&current_path, fmstate.borrow().settings.show_hidden);
+    footer_bar::update_item_count(&footer_components.center_label, count);
+
+    window.set_child(Some(&main_vbox));
     window.present();
 }

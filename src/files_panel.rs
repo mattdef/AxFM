@@ -9,7 +9,9 @@ use std::{
     rc::Rc,
 };
 
-pub fn build_files_panel(fmstate: Rc<RefCell<FmState>>) -> (ScrolledWindow, StringList, ListView) {
+pub fn build_files_panel(
+    fmstate: Rc<RefCell<FmState>>,
+) -> (ScrolledWindow, StringList, ListView, SingleSelection) {
     let files_list = StringList::new(&[]);
     let files_selection = SingleSelection::new(Some(files_list.clone()));
 
@@ -204,7 +206,7 @@ pub fn build_files_panel(fmstate: Rc<RefCell<FmState>>) -> (ScrolledWindow, Stri
     let list_view = ListView::new(Some(files_selection.clone()), Some(factory));
     let scroll = ScrolledWindow::builder().child(&list_view).vexpand(true).hexpand(true).build();
 
-    (scroll, files_list, list_view)
+    (scroll, files_list, list_view, files_selection)
 }
 
 pub fn populate_files_list(files_list: &gtk4::StringList, dir: &gio::File, show_hidden: &bool) {

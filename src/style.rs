@@ -10,6 +10,15 @@ pub fn load_css() {
         .pathbar {
             margin: 5px;
         }
+        .footer-bar {
+            background-color: #f0f0f0;
+            border-top: 1px solid #d0d0d0;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .footer-label {
+            margin: 0 10px;
+        }
 	",
     );
 
