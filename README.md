@@ -8,11 +8,11 @@ A super awesome file manager for AxOS built with gtk4.
    - [x] New things
    - [x] Open in terminal
    - [x] Copy/Cut/Paste/Rename... the usual
-   - [ ] Sort
+   - [x] Sort
    - [x] Show hiddens
    - [x] Properties
 - [x] Implement history system
-- [ ] Implement proper headerbar
+- [x] Implement proper headerbar
 - [x] Implement drag and drop
 - [ ] Customization options
    - [ ] Custom icons
@@ -23,9 +23,9 @@ A super awesome file manager for AxOS built with gtk4.
 - [ ] Network/remote drives (smtp)
 - [ ] Multiple tabs support
 - [ ] Mounted media support
-- [ ] Foot bar
-   - [ ] Free space
-   - [ ] if no selection: Number of elements in the displayed directory (+ hidden)
-   - [ ] if selected: Type and size
+- [x] Foot bar
+   - [x] Free space
+   - [x] if no selection: Number of elements in the displayed directory (+ hidden)
+   - [x] if selected: Type and size
   - [ ] Default opening app management
   - [ ] Cli support for settings
