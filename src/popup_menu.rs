@@ -18,6 +18,7 @@ pub fn get_empty_right_click(
     content_area: &GtkBox,
     fmstate: Rc<RefCell<FmState>>,
     file_store: &gtk4::gio::ListStore,
+    sidebar_list: &StringList,
 ) -> Popover {
     let popover = Popover::new();
     popover.set_parent(content_area);
@@ -32,6 +33,12 @@ pub fn get_empty_right_click(
         Rc::new(MenuItem {
             label: "Paste",
             icon_name: "edit-paste-symbolic",
+            show_if_file: true,
+            show_if_dir: true,
+        }),
+        Rc::new(MenuItem {
+            label: "Add to Bookmarks",
+            icon_name: "starred-symbolic",
             show_if_file: true,
             show_if_dir: true,
         }),
@@ -88,6 +95,8 @@ pub fn get_empty_right_click(
         popover,
         #[weak]
         file_store,
+        #[weak]
+        sidebar_list,
         #[strong]
         fmstate,
         move |sel| {
@@ -108,6 +117,15 @@ pub fn get_empty_right_click(
                         );
                     }
                     "Paste" => paste_function(fmstate.clone(), &file_store),
+                    "Add to Bookmarks" => {
+                        let current_path = fmstate.borrow().current_path.clone();
+                        let bookmark = crate::bookmarks::Bookmark::from_file(&current_path);
+                        if let Err(e) = fmstate.borrow_mut().add_bookmark(bookmark) {
+                            eprintln!("Failed to add bookmark: {}", e);
+                        }
+                        // Rafraîchir la sidebar
+                        crate::sidebar::refresh_sidebar(&sidebar_list, &fmstate);
+                    }
                     "Open Terminal Here" => {
                         let terminal_cmd =
                             env::var("TERMINAL").unwrap_or_else(|_| "xterm".to_string());

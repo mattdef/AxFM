@@ -31,6 +31,7 @@ pub fn build_headerbar(fmstate: Rc<RefCell<FmState>>) -> HeaderBar {
     let edit_submenu = Menu::new();
     edit_submenu.append(Some("Undo"), Some("win.undo_history"));
     edit_submenu.append(Some("Redo"), Some("win.redo_history"));
+    edit_submenu.append(Some("Manage Bookmarks"), Some("win.manage_bookmarks"));
     menu.append_submenu(Some("Edit"), &edit_submenu);
 
     // "View" submenu
@@ -59,6 +60,7 @@ pub fn implement_actions(
     file_store: &gtk4::gio::ListStore,
     sidebar_selection: &gtk4::SingleSelection,
     headerbar: &HeaderBar,
+    sidebar_list: &gtk4::StringList,
 ) {
     // Set initial window title
     let current_dir = fmstate.borrow().current_path.basename();
@@ -177,6 +179,25 @@ pub fn implement_actions(
         }
     ));
     window.add_action(&redo_action);
+
+    // Manage Bookmarks action
+    let manage_bookmarks_action = SimpleAction::new("manage_bookmarks", None);
+    manage_bookmarks_action.connect_activate(glib::clone!(
+        #[weak]
+        window,
+        #[strong]
+        fmstate,
+        #[weak]
+        sidebar_list,
+        move |_, _| {
+            crate::bookmarks::show_manage_bookmarks_dialog(
+                window.upcast_ref::<gtk4::Window>(),
+                fmstate.clone(),
+                &sidebar_list,
+            );
+        }
+    ));
+    window.add_action(&manage_bookmarks_action);
 
     // Update window title when path changes
     fmstate.borrow_mut().on_path_changed.push(Box::new(glib::clone!(

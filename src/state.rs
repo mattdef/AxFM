@@ -1,4 +1,4 @@
-use crate::utils::FMSettings;
+use crate::{bookmarks::Bookmark, utils::FMSettings};
 use gtk4::{gio, glib::GString};
 use std::path::PathBuf;
 
@@ -12,6 +12,7 @@ pub struct FmState {
     pub clipboard_is_cut: bool,
     pub history: Vec<gio::File>,
     pub history_index: usize,
+    pub bookmarks: Vec<Bookmark>,
 }
 
 impl FmState {
@@ -29,6 +30,7 @@ impl FmState {
             clipboard_is_cut: false,
             history,
             history_index: 0,
+            bookmarks: crate::bookmarks::load_bookmarks(),
         }
     }
 
@@ -72,5 +74,24 @@ impl FmState {
         let file = self.history[self.history_index].clone();
         self.set_path(file.clone());
         Some(file)
+    }
+
+    pub fn add_bookmark(&mut self, bookmark: Bookmark) -> Result<(), std::io::Error> {
+        // Check for duplicates
+        if !self.bookmarks.iter().any(|b| b.path == bookmark.path) {
+            self.bookmarks.push(bookmark);
+            crate::bookmarks::save_bookmarks(&self.bookmarks)
+        } else {
+            Ok(()) // Already exists
+        }
+    }
+
+    pub fn remove_bookmark(&mut self, index: usize) -> Result<(), std::io::Error> {
+        if index < self.bookmarks.len() {
+            self.bookmarks.remove(index);
+            crate::bookmarks::save_bookmarks(&self.bookmarks)
+        } else {
+            Ok(()) // Index out of bounds, ignore
+        }
     }
 }

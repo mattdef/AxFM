@@ -19,7 +19,7 @@ A super awesome file manager for AxOS built with gtk4.
 - [ ] Display layouts (how files and folders are shown)
 - [ ] Animations
 - [ ] Clipboard handling
-- [ ] Bookmarks
+- [x] Bookmarks
 - [ ] Network/remote drives (smtp)
 - [ ] Multiple tabs support
 - [ ] Mounted media support

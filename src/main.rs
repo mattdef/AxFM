@@ -1,3 +1,4 @@
+mod bookmarks;
 mod files_panel;
 mod footer_bar;
 mod headerbar;
@@ -44,7 +45,8 @@ fn build_fm(app: &Application) {
 
     let (files_scroll, file_store, column_view, files_selection) =
         files_panel::build_files_panel(fmstate.clone());
-    let (sidebar_box, sidebar_selection) = sidebar::build_sidebar(fmstate.clone(), &file_store);
+    let (sidebar_box, sidebar_selection, sidebar_list) =
+        sidebar::build_sidebar(fmstate.clone(), &file_store);
     let path_bar = pathbar::build_pathbar(&mut fmstate.borrow_mut());
 
     // Build and set headerbar at window level
@@ -52,8 +54,12 @@ fn build_fm(app: &Application) {
     window.set_titlebar(Some(&headerbar));
 
     // right click menus
-    let empty_area_menu =
-        popup_menu::get_empty_right_click(&content_area, fmstate.clone(), &file_store);
+    let empty_area_menu = popup_menu::get_empty_right_click(
+        &content_area,
+        fmstate.clone(),
+        &file_store,
+        &sidebar_list,
+    );
     let file_area_menu =
         popup_menu::get_file_right_click(&content_area, fmstate.clone(), &file_store, &column_view);
 
@@ -65,6 +71,7 @@ fn build_fm(app: &Application) {
         &file_store,
         &sidebar_selection,
         &headerbar,
+        &sidebar_list,
     );
 
     files_panel::populate_files_list(
@@ -76,6 +83,8 @@ fn build_fm(app: &Application) {
     sidebar_selection.connect_selected_notify(glib::clone!(
         #[weak]
         file_store,
+        #[weak]
+        sidebar_list,
         #[strong]
         fmstate,
         move |sel| {
@@ -84,9 +93,39 @@ fn build_fm(app: &Application) {
                 return;
             }
 
-            let sidebar_items = sidebar::get_sidebar_items();
+            // Get the selected item text
+            let selected_text = if let Some(obj) = sidebar_list.item(idx) {
+                if let Some(str_obj) = obj.downcast_ref::<gtk4::StringObject>() {
+                    str_obj.string().to_string()
+                } else {
+                    return;
+                }
+            } else {
+                return;
+            };
 
-            if let Some((_, file)) = sidebar_items.get(idx as usize) {
+            // Skip if it's a heading
+            if selected_text == "Places" || selected_text == "Bookmarks" {
+                sel.set_selected(gtk4::INVALID_LIST_POSITION);
+                return;
+            }
+
+            // Find the file for this item (either in Places or Bookmarks)
+            let sidebar_items = sidebar::get_sidebar_items();
+            let target_file = if let Some((_, file)) =
+                sidebar_items.iter().find(|(name, _)| *name == selected_text)
+            {
+                Some(file.clone())
+            } else {
+                // Check in bookmarks
+                let bookmarks = &fmstate.borrow().bookmarks;
+                bookmarks
+                    .iter()
+                    .find(|b| b.name == selected_text)
+                    .map(|b| gio::File::for_path(&b.path))
+            };
+
+            if let Some(file) = target_file {
                 let mut fmstate_mut = fmstate.borrow_mut();
 
                 files_panel::populate_files_list(

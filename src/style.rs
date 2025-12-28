@@ -4,9 +4,14 @@ pub fn load_css() {
     provider.load_from_data(
         "
 	    .sidebar-heading {
-	        font-size: 18px;
 	        font-weight: bold;
+	        font-size: 0.9em;
+	        color: #666;
+	        padding: 8px 12px 4px 12px;
 	    }
+        .sidebar-bookmark-item {
+            /* Style for bookmark items */
+        }
         .pathbar {
             margin: 5px;
         }

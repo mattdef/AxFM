@@ -8,19 +8,17 @@ use std::{cell::RefCell, rc::Rc};
 pub fn build_sidebar(
     fmstate: Rc<RefCell<FmState>>,
     file_store: &gtk4::gio::ListStore,
-) -> (GtkBox, SingleSelection) {
-    let sidebar_items = get_sidebar_items();
-    let labels: Vec<&str> = sidebar_items.iter().map(|(name, _)| *name).collect();
-
-    let sidebar_list = StringList::new(&labels);
+) -> (GtkBox, SingleSelection, StringList) {
+    let sidebar_list = StringList::new(&[]);
     let sidebar_selection = SingleSelection::new(Some(sidebar_list.clone()));
     sidebar_selection.set_can_unselect(true);
     sidebar_selection.set_autoselect(false);
 
+    // Initial population
+    refresh_sidebar(&sidebar_list, &fmstate);
+
     let factory = SignalListItemFactory::new();
     factory.connect_setup(glib::clone!(
-        #[strong]
-        sidebar_items,
         #[weak]
         file_store,
         #[strong]
@@ -45,8 +43,6 @@ pub fn build_sidebar(
             // add drop target
             let drop_target = gtk4::DropTarget::new(String::static_type(), gdk::DragAction::COPY);
             drop_target.connect_drop(glib::clone!(
-                #[strong]
-                sidebar_items,
                 #[weak_allow_none]
                 label,
                 #[weak_allow_none]
@@ -57,6 +53,7 @@ pub fn build_sidebar(
                     if let Some(label) = label.as_ref() {
                         let label_text = label.text();
 
+                        let sidebar_items = get_sidebar_items();
                         if let Some((_, target_path)) =
                             sidebar_items.iter().find(|(n, _)| **n == label_text)
                         {
@@ -64,7 +61,8 @@ pub fn build_sidebar(
                                 let src_file = gio::File::for_uri(&uri);
                                 let src_filename =
                                     src_file.basename().unwrap_or_else(|| "unknown".into());
-                                let dest_file = target_path.child(&src_filename);
+                                let dest_file =
+                                    target_path.child(src_filename.to_str().unwrap_or("unknown"));
 
                                 match src_file.move_(
                                     &dest_file,
@@ -98,7 +96,7 @@ pub fn build_sidebar(
 
     factory.connect_bind(glib::clone!(
         #[strong]
-        sidebar_items,
+        fmstate,
         move |_, item| {
             let hbox = item.child().and_downcast::<gtk4::Box>().unwrap();
             let icon = hbox.first_child().and_downcast::<gtk4::Image>().unwrap();
@@ -108,14 +106,30 @@ pub fn build_sidebar(
             let label_text = obj.string();
             label.set_text(&label_text);
 
+            // Check if it's a heading
+            if label_text == "Places" || label_text == "Bookmarks" {
+                label.remove_css_class("sidebar-item");
+                label.add_css_class("sidebar-heading");
+                icon.set_visible(false);
+                label.set_tooltip_text(None);
+                return;
+            }
+
+            // Regular item
+            label.remove_css_class("sidebar-heading");
+            label.add_css_class("sidebar-item");
+            icon.set_visible(true);
+
+            // Get sidebar items
+            let sidebar_items = get_sidebar_items();
+
             if let Some((name, file)) = sidebar_items.iter().find(|(n, _)| *n == label_text) {
                 let tooltip = file
                     .path()
-                    .map(|p| p.display().to_string()) // local path
-                    .unwrap_or_else(|| file.uri().to_string()); // virtual file
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| file.uri().to_string());
                 label.set_tooltip_text(Some(&tooltip));
 
-                // Choose an icon per item
                 let icon_name = match *name {
                     "Home" => "user-home",
                     "Documents" => "folder-documents",
@@ -128,8 +142,16 @@ pub fn build_sidebar(
                 };
                 icon.set_icon_name(Some(icon_name));
             } else {
-                label.set_tooltip_text(None);
-                icon.set_icon_name(Some("folder"));
+                // It's a bookmark
+                icon.set_icon_name(Some("starred"));
+
+                // Find the bookmark to get its path for tooltip
+                let bookmarks = fmstate.borrow().bookmarks.clone();
+                if let Some(bookmark) = bookmarks.iter().find(|b| b.name == label_text) {
+                    label.set_tooltip_text(Some(&bookmark.path));
+                } else {
+                    label.set_tooltip_text(None);
+                }
             }
         }
     ));
@@ -154,10 +176,9 @@ pub fn build_sidebar(
 
     heading_box.append(&heading);
 
-    sidebar_box.append(&heading_box);
     sidebar_box.append(&scroll);
 
-    (sidebar_box, sidebar_selection)
+    (sidebar_box, sidebar_selection, sidebar_list)
 }
 
 pub fn get_sidebar_items() -> Vec<(&'static str, gio::File)> {
@@ -176,4 +197,23 @@ pub fn get_sidebar_items() -> Vec<(&'static str, gio::File)> {
         ("Videos", dirs(UserDirectory::Videos)),
         ("Trash", gio::File::for_uri("trash:///")),
     ]
+}
+
+pub fn refresh_sidebar(sidebar_list: &StringList, fmstate: &Rc<RefCell<FmState>>) {
+    // Clear existing items
+    sidebar_list.splice(0, sidebar_list.n_items(), &[]);
+
+    // Add Places section
+    sidebar_list.append("Places");
+    let places = get_sidebar_items();
+    for (name, _) in places.iter() {
+        sidebar_list.append(name);
+    }
+
+    // Add Bookmarks section
+    sidebar_list.append("Bookmarks");
+    let bookmarks = fmstate.borrow().bookmarks.clone();
+    for bookmark in bookmarks.iter() {
+        sidebar_list.append(&bookmark.name);
+    }
 }
