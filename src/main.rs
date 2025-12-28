@@ -1,13 +1,17 @@
 mod files_panel;
 mod footer_bar;
 mod headerbar;
+mod models;
 mod pathbar;
 mod popup_menu;
+mod properties_dialog;
 mod sidebar;
+mod sorters;
 mod state;
 mod style;
 mod utils;
 
+use crate::models::file_item::FileItem;
 use gtk4::{
     Application, ApplicationWindow, Box as GtkBox, GestureClick, Orientation, Paned, gio, glib,
     prelude::*,
@@ -38,29 +42,40 @@ fn build_fm(app: &Application) {
     let home_path = gio::File::for_path(glib::home_dir());
     let fmstate = Rc::new(RefCell::new(state::FmState::new(home_path.clone())));
 
-    let (files_scroll, files_list, list_view, files_selection) =
+    let (files_scroll, file_store, column_view, files_selection) =
         files_panel::build_files_panel(fmstate.clone());
-    let (sidebar_box, sidebar_selection) = sidebar::build_sidebar(fmstate.clone(), &files_list);
+    let (sidebar_box, sidebar_selection) = sidebar::build_sidebar(fmstate.clone(), &file_store);
     let path_bar = pathbar::build_pathbar(&mut fmstate.borrow_mut());
+
+    // Build and set headerbar at window level
+    let headerbar = headerbar::build_headerbar(fmstate.clone());
+    window.set_titlebar(Some(&headerbar));
 
     // right click menus
     let empty_area_menu =
-        popup_menu::get_empty_right_click(&content_area, fmstate.clone(), &files_list);
+        popup_menu::get_empty_right_click(&content_area, fmstate.clone(), &file_store);
     let file_area_menu =
-        popup_menu::get_file_right_click(&content_area, fmstate.clone(), &files_list, &list_view);
+        popup_menu::get_file_right_click(&content_area, fmstate.clone(), &file_store, &column_view);
 
     // implement all actions for the headerbar
-    headerbar::implement_actions(&window, &app, fmstate.clone(), &files_list, &sidebar_selection);
+    headerbar::implement_actions(
+        &window,
+        &app,
+        fmstate.clone(),
+        &file_store,
+        &sidebar_selection,
+        &headerbar,
+    );
 
     files_panel::populate_files_list(
-        &files_list,
+        &file_store,
         &home_path,
         &fmstate.borrow().settings.show_hidden,
     );
 
     sidebar_selection.connect_selected_notify(glib::clone!(
         #[weak]
-        files_list,
+        file_store,
         #[strong]
         fmstate,
         move |sel| {
@@ -75,7 +90,7 @@ fn build_fm(app: &Application) {
                 let mut fmstate_mut = fmstate.borrow_mut();
 
                 files_panel::populate_files_list(
-                    &files_list,
+                    &file_store,
                     &file,
                     &fmstate_mut.settings.show_hidden,
                 );
@@ -87,7 +102,7 @@ fn build_fm(app: &Application) {
 
     path_bar.connect_activate(glib::clone!(
         #[weak]
-        files_list,
+        file_store,
         #[weak]
         sidebar_selection,
         #[strong]
@@ -102,7 +117,7 @@ fn build_fm(app: &Application) {
             };
 
             files_panel::populate_files_list(
-                &files_list,
+                &file_store,
                 &file,
                 &fmstate.borrow().settings.show_hidden,
             );
@@ -115,40 +130,38 @@ fn build_fm(app: &Application) {
         }
     ));
 
-    list_view.connect_activate(glib::clone!(
+    column_view.connect_activate(glib::clone!(
         #[strong]
         fmstate,
         #[weak]
-        files_list,
+        file_store,
         #[weak]
         sidebar_selection,
-        move |lv, position| {
-            if let Some(obj) = lv.model().and_then(|m| m.item(position)) {
-                let string_obj = obj.downcast::<gtk4::StringObject>().unwrap();
-                let file_str = string_obj.string();
+        move |cv, position| {
+            if let Some(obj) = cv.model().and_then(|m| m.item(position)) {
+                if let Some(file_item) = obj.downcast_ref::<FileItem>() {
+                    let file_path = file_item.path();
 
-                // Try local path first, otherwise fallback to URI
-                let file = if std::path::Path::new(&file_str).exists() {
-                    gio::File::for_path(&file_str)
-                } else {
-                    gio::File::for_uri(&file_str)
-                };
+                    // Try local path first, otherwise fallback to URI
+                    let file = if std::path::Path::new(&file_path).exists() {
+                        gio::File::for_path(&file_path)
+                    } else {
+                        gio::File::for_uri(&file_path)
+                    };
 
-                let file_type =
-                    file.query_file_type(gio::FileQueryInfoFlags::NONE, None::<&gio::Cancellable>);
+                    if file_item.is_directory() {
+                        files_panel::populate_files_list(
+                            &file_store,
+                            &file,
+                            &fmstate.borrow().settings.show_hidden,
+                        );
 
-                if file_type == gio::FileType::Directory {
-                    files_panel::populate_files_list(
-                        &files_list,
-                        &file,
-                        &fmstate.borrow().settings.show_hidden,
-                    );
+                        let mut fmstate_mut = fmstate.borrow_mut();
 
-                    let mut fmstate_mut = fmstate.borrow_mut();
-
-                    fmstate_mut.set_path(file.clone());
-                    fmstate_mut.update_history(file.clone());
-                    sidebar_selection.unselect_all();
+                        fmstate_mut.set_path(file.clone());
+                        fmstate_mut.update_history(file.clone());
+                        sidebar_selection.unselect_all();
+                    }
                 }
             }
         }
@@ -222,7 +235,7 @@ fn build_fm(app: &Application) {
     let left_label = footer_components.left_label.clone();
     let center_label = footer_components.center_label.clone();
     let right_label = footer_components.right_label.clone();
-    let files_list_path = files_list.clone();
+    let file_store_path = file_store.clone();
 
     // Connect footer updates for path changes
     fmstate.borrow_mut().connect_path_changed(glib::clone!(
@@ -233,13 +246,13 @@ fn build_fm(app: &Application) {
         #[weak]
         right_label,
         #[weak]
-        files_list_path,
+        file_store_path,
         move |new_path| {
             // Update disk space
             footer_bar::update_disk_space(&left_label, new_path);
 
             // Update item count based on what's actually displayed in the list
-            let count = files_list_path.n_items() as usize;
+            let count = file_store_path.n_items() as usize;
             footer_bar::update_item_count(&center_label, count);
 
             // Clear selection info and default app
@@ -250,7 +263,7 @@ fn build_fm(app: &Application) {
     // Clone labels again for selection callback
     let center_label_sel = footer_components.center_label.clone();
     let right_label_sel = footer_components.right_label.clone();
-    let files_list_sel = files_list.clone();
+    let file_store_sel = file_store.clone();
 
     // Connect footer updates for selection changes
     files_selection.connect_selected_notify(glib::clone!(
@@ -259,29 +272,30 @@ fn build_fm(app: &Application) {
         #[weak]
         right_label_sel,
         #[weak]
-        files_list_sel,
+        file_store_sel,
         move |sel| {
             let idx = sel.selected();
 
             if idx == gtk4::INVALID_LIST_POSITION {
                 // No selection - show item count based on displayed items
-                let count = files_list_sel.n_items() as usize;
+                let count = file_store_sel.n_items() as usize;
                 footer_bar::update_item_count(&center_label_sel, count);
                 right_label_sel.set_text("");
             } else {
                 // Selection - show file info
-                if let Some(obj) = files_list_sel.item(idx) {
-                    let string_obj = obj.downcast::<gtk4::StringObject>().unwrap();
-                    let file_str = string_obj.string();
+                if let Some(obj) = file_store_sel.item(idx) {
+                    if let Some(file_item) = obj.downcast_ref::<FileItem>() {
+                        let file_path = file_item.path();
 
-                    let file = if std::path::Path::new(&file_str).exists() {
-                        gio::File::for_path(&file_str)
-                    } else {
-                        gio::File::for_uri(&file_str)
-                    };
+                        let file = if std::path::Path::new(&file_path).exists() {
+                            gio::File::for_path(&file_path)
+                        } else {
+                            gio::File::for_uri(&file_path)
+                        };
 
-                    footer_bar::update_selection_info(&center_label_sel, &file);
-                    footer_bar::update_default_app(&right_label_sel, &file);
+                        footer_bar::update_selection_info(&center_label_sel, &file);
+                        footer_bar::update_default_app(&right_label_sel, &file);
+                    }
                 }
             }
         }

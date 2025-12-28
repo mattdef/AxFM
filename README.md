@@ -5,12 +5,12 @@ A super awesome file manager for AxOS built with gtk4.
 ## TO DO's
 
 - [ ] Implement right click functions
-   - [ ] New things
+   - [x] New things
    - [x] Open in terminal
    - [x] Copy/Cut/Paste/Rename... the usual
    - [ ] Sort
    - [x] Show hiddens
-   - [ ] Properties
+   - [x] Properties
 - [x] Implement history system
 - [ ] Implement proper headerbar
 - [x] Implement drag and drop

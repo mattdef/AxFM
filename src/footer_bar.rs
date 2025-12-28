@@ -145,7 +145,7 @@ fn get_disk_space(path: &Path) -> Option<(u64, u64)> {
     None
 }
 
-fn get_file_type_description(file: &gio::File) -> String {
+pub fn get_file_type_description(file: &gio::File) -> String {
     // Try to get MIME type from gio first
     if let Ok(info) = file.query_info(
         "standard::content-type",
@@ -198,7 +198,7 @@ fn get_file_type_description(file: &gio::File) -> String {
     "Unknown type".to_string()
 }
 
-fn get_default_app(file: &gio::File) -> Option<String> {
+pub fn get_default_app(file: &gio::File) -> Option<String> {
     if let Ok(info) = file.query_info(
         "standard::content-type",
         gio::FileQueryInfoFlags::NONE,
@@ -214,7 +214,7 @@ fn get_default_app(file: &gio::File) -> Option<String> {
     None
 }
 
-fn format_size(bytes: u64) -> String {
+pub fn format_size(bytes: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;
     const GB: u64 = MB * 1024;

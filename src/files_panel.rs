@@ -1,7 +1,8 @@
-use crate::{state::FmState, utils::WidgetDataExt};
+use crate::{models::file_item::FileItem, sorters, state::FmState, utils::WidgetDataExt};
 use gtk4::{
-    DragIcon, DragSource, EventControllerMotion, ListView, ScrolledWindow, SignalListItemFactory,
-    SingleSelection, StringList, gdk, gio, gio::ThemedIcon, glib, prelude::*,
+    ColumnView, ColumnViewColumn, DragIcon, DragSource, EventControllerMotion, ScrolledWindow,
+    SignalListItemFactory, SingleSelection, SortListModel, gdk, gio, gio::ThemedIcon, glib,
+    prelude::*,
 };
 use std::{
     cell::RefCell,
@@ -11,11 +12,63 @@ use std::{
 
 pub fn build_files_panel(
     fmstate: Rc<RefCell<FmState>>,
-) -> (ScrolledWindow, StringList, ListView, SingleSelection) {
-    let files_list = StringList::new(&[]);
-    let files_selection = SingleSelection::new(Some(files_list.clone()));
+) -> (ScrolledWindow, gio::ListStore, ColumnView, SingleSelection) {
+    let file_store = gio::ListStore::new::<FileItem>();
 
+    // Create sorter based on settings
+    let folders_first = fmstate.borrow().settings.folders_first;
+    let sorter = sorters::create_name_sorter(folders_first);
+
+    let sort_model = SortListModel::new(Some(file_store.clone()), Some(sorter.clone()));
+    let selection_model = SingleSelection::new(Some(sort_model.clone()));
+
+    let column_view = ColumnView::new(Some(selection_model.clone()));
+
+    // Name Column
+    let name_factory = create_name_column_factory(fmstate.clone());
+    let name_column = ColumnViewColumn::new(Some("Name"), Some(name_factory));
+    name_column.set_expand(true);
+    name_column.set_sorter(Some(&sorters::create_name_sorter(folders_first)));
+    column_view.append_column(&name_column);
+
+    // Size Column
+    let size_factory = create_size_column_factory();
+    let size_column = ColumnViewColumn::new(Some("Size"), Some(size_factory));
+    size_column.set_fixed_width(100);
+    size_column.set_sorter(Some(&sorters::create_size_sorter(folders_first)));
+    column_view.append_column(&size_column);
+
+    // Modified Column
+    let modified_factory = create_modified_column_factory();
+    let modified_column = ColumnViewColumn::new(Some("Modified"), Some(modified_factory));
+    modified_column.set_fixed_width(150);
+    modified_column.set_sorter(Some(&sorters::create_date_sorter(folders_first)));
+    column_view.append_column(&modified_column);
+
+    // Type Column
+    let type_factory = create_type_column_factory();
+    let type_column = ColumnViewColumn::new(Some("Type"), Some(type_factory));
+    type_column.set_fixed_width(120);
+    type_column.set_sorter(Some(&sorters::create_type_sorter(folders_first)));
+    column_view.append_column(&type_column);
+
+    // Connect the column view sorter to the sort model
+    column_view.sorter().unwrap().connect_changed(glib::clone!(
+        #[weak]
+        sort_model,
+        move |sorter, _| {
+            sort_model.set_sorter(Some(sorter));
+        }
+    ));
+
+    let scroll = ScrolledWindow::builder().child(&column_view).vexpand(true).hexpand(true).build();
+
+    (scroll, file_store, column_view, selection_model)
+}
+
+fn create_name_column_factory(fmstate: Rc<RefCell<FmState>>) -> SignalListItemFactory {
     let factory = SignalListItemFactory::new();
+
     factory.connect_setup(glib::clone!(
         #[strong]
         fmstate,
@@ -24,11 +77,12 @@ pub fn build_files_panel(
             let icon = gtk4::Image::new();
             icon.set_pixel_size(24);
             let label = gtk4::Label::new(None);
+            label.set_xalign(0.0);
             hbox.append(&icon);
             hbox.append(&label);
             item.set_child(Some(&hbox));
 
-            // setup hover detection
+            // Setup hover detection
             let motion = EventControllerMotion::new();
 
             motion.connect_enter(glib::clone!(
@@ -38,11 +92,15 @@ pub fn build_files_panel(
                 item,
                 move |_, _, _| {
                     if let Some(obj) = item.item() {
-                        let file_path = obj.downcast_ref::<gtk4::StringObject>().unwrap().string();
-                        fmstate.borrow_mut().hovered_file = Some(file_path);
+                        if let Some(file_item) = obj.downcast_ref::<FileItem>() {
+                            if let Ok(mut fmstate_mut) = fmstate.try_borrow_mut() {
+                                fmstate_mut.hovered_file = Some(file_item.path().into());
+                            }
+                        }
                     }
                 }
             ));
+
             motion.connect_leave(glib::clone!(
                 #[strong]
                 fmstate,
@@ -55,11 +113,10 @@ pub fn build_files_panel(
 
             hbox.add_controller(motion);
 
-            // setup drag
+            // Setup drag
             let drag_source = DragSource::new();
             drag_source.set_actions(gdk::DragAction::COPY);
 
-            // This provides the data when drag starts
             drag_source.connect_prepare(glib::clone!(
                 #[strong]
                 fmstate,
@@ -105,120 +162,160 @@ pub fn build_files_panel(
     ));
 
     factory.connect_bind(glib::clone!(
-        #[weak]
-        files_list,
         #[strong]
         fmstate,
         move |_, item| {
             let hbox = item.child().and_downcast::<gtk4::Box>().unwrap();
-
             let icon = hbox.first_child().and_downcast::<gtk4::Image>().unwrap();
             let label = hbox.last_child().and_downcast::<gtk4::Label>().unwrap();
-            let obj = item.item().unwrap().downcast::<gtk4::StringObject>().unwrap();
-
-            let file_str = obj.string();
-            let file = if std::path::Path::new(&file_str).exists() {
-                gio::File::for_path(&file_str)
-            } else {
-                gio::File::for_uri(&file_str)
-            };
-
-            if let Ok(info) = file.query_info(
-                "standard::icon,standard::display-name,standard::type",
-                gtk4::gio::FileQueryInfoFlags::NONE,
-                gtk4::gio::Cancellable::NONE,
-            ) {
-                if let Some(icon_gio) = info.icon() {
-                    icon.set_from_gicon(&icon_gio);
-                }
-                label.set_text(info.display_name().as_str());
-            } else {
-                label.set_text(&obj.string());
-                icon.set_icon_name(Some("gtk-missing-image"));
-            }
-
-            // add drop target
-            let drop_target = gtk4::DropTarget::new(String::static_type(), gdk::DragAction::COPY);
-
-            drop_target.connect_drop(glib::clone!(
-                #[weak_allow_none]
-                files_list,
-                #[strong]
-                fmstate,
-                move |drop_target, value, _, _| {
-                    if let Some(target_widget) = drop_target.widget() {
-                        if let Some(target_path) =
-                            target_widget.get_typed_data::<glib::GString>("file-path")
-                        {
-                            if let Ok(uri) = value.get::<glib::GString>() {
-                                let src_file = gio::File::for_uri(&uri);
-                                let mut dest_path = PathBuf::from(&target_path);
-
-                                // get the filename from the source file
-                                let src_filename =
-                                    src_file.basename().unwrap_or_else(|| "unknown".into());
-
-                                // creating the absolute dest path
-                                dest_path.push(src_filename);
-                                let dest_file = gtk4::gio::File::for_path(dest_path);
-
-                                match src_file.move_(
-                                    &dest_file,
-                                    gio::FileCopyFlags::OVERWRITE,
-                                    None::<&gio::Cancellable>,
-                                    None::<&mut dyn FnMut(i64, i64)>,
-                                ) {
-                                    Ok(_) => {
-                                        if let Some(files_list) = &files_list {
-                                            let fmstate_ref = fmstate.borrow();
-                                            populate_files_list(
-                                                files_list,
-                                                &fmstate_ref.current_path,
-                                                &fmstate_ref.settings.show_hidden,
-                                            );
-                                        }
-                                    }
-                                    Err(e) => eprintln!("Error while moving file: {}", e),
-                                }
-                            }
-                        }
-                    }
-
-                    true
-                }
-            ));
 
             if let Some(obj) = item.item() {
-                let file_path = obj.downcast_ref::<gtk4::StringObject>().unwrap().string();
-                let is_dir = Path::new(&file_path).is_dir();
+                if let Some(file_item) = obj.downcast_ref::<FileItem>() {
+                    label.set_text(&file_item.display_name());
 
-                hbox.set_typed_data("file-path", file_path);
-                hbox.set_flag("is-dir", is_dir);
-                hbox.track_widget_cleanup();
+                    if let Some(icon_gio) = file_item.icon() {
+                        icon.set_from_gicon(&icon_gio);
+                    } else {
+                        icon.set_icon_name(Some("gtk-missing-image"));
+                    }
 
-                if is_dir {
-                    hbox.add_controller(drop_target);
+                    // Add drop target for directories
+                    let is_dir = file_item.is_directory();
+                    let file_path = file_item.path();
+
+                    hbox.set_typed_data("file-path", glib::GString::from(file_path.clone()));
+                    hbox.set_flag("is-dir", is_dir);
+                    hbox.track_widget_cleanup();
+
+                    if is_dir {
+                        let drop_target =
+                            gtk4::DropTarget::new(String::static_type(), gdk::DragAction::COPY);
+
+                        drop_target.connect_drop(glib::clone!(
+                            #[strong]
+                            fmstate,
+                            move |drop_target, value, _, _| {
+                                if let Some(target_widget) = drop_target.widget() {
+                                    if let Some(target_path) =
+                                        target_widget.get_typed_data::<glib::GString>("file-path")
+                                    {
+                                        if let Ok(uri) = value.get::<glib::GString>() {
+                                            let src_file = gio::File::for_uri(&uri);
+                                            let mut dest_path = PathBuf::from(&target_path);
+
+                                            let src_filename = src_file
+                                                .basename()
+                                                .unwrap_or_else(|| "unknown".into());
+
+                                            dest_path.push(src_filename);
+                                            let dest_file = gtk4::gio::File::for_path(dest_path);
+
+                                            match src_file.move_(
+                                                &dest_file,
+                                                gio::FileCopyFlags::OVERWRITE,
+                                                None::<&gio::Cancellable>,
+                                                None::<&mut dyn FnMut(i64, i64)>,
+                                            ) {
+                                                Ok(_) => {
+                                                    // File moved successfully
+                                                    // Repopulation will be handled by caller
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("Error while moving file: {}", e)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                true
+                            }
+                        ));
+
+                        hbox.add_controller(drop_target);
+                    }
                 }
             }
         }
     ));
 
-    let list_view = ListView::new(Some(files_selection.clone()), Some(factory));
-    let scroll = ScrolledWindow::builder().child(&list_view).vexpand(true).hexpand(true).build();
-
-    (scroll, files_list, list_view, files_selection)
+    factory
 }
 
-pub fn populate_files_list(files_list: &gtk4::StringList, dir: &gio::File, show_hidden: &bool) {
-    while files_list.n_items() > 0 {
-        files_list.remove(0);
-    }
+fn create_size_column_factory() -> SignalListItemFactory {
+    let factory = SignalListItemFactory::new();
+
+    factory.connect_setup(|_, item| {
+        let label = gtk4::Label::new(None);
+        label.set_xalign(1.0); // Right align
+        item.set_child(Some(&label));
+    });
+
+    factory.connect_bind(|_, item| {
+        let label = item.child().and_downcast::<gtk4::Label>().unwrap();
+
+        if let Some(obj) = item.item() {
+            if let Some(file_item) = obj.downcast_ref::<FileItem>() {
+                label.set_text(&file_item.format_size());
+            }
+        }
+    });
+
+    factory
+}
+
+fn create_modified_column_factory() -> SignalListItemFactory {
+    let factory = SignalListItemFactory::new();
+
+    factory.connect_setup(|_, item| {
+        let label = gtk4::Label::new(None);
+        label.set_xalign(0.0);
+        item.set_child(Some(&label));
+    });
+
+    factory.connect_bind(|_, item| {
+        let label = item.child().and_downcast::<gtk4::Label>().unwrap();
+
+        if let Some(obj) = item.item() {
+            if let Some(file_item) = obj.downcast_ref::<FileItem>() {
+                label.set_text(&file_item.format_modified());
+            }
+        }
+    });
+
+    factory
+}
+
+fn create_type_column_factory() -> SignalListItemFactory {
+    let factory = SignalListItemFactory::new();
+
+    factory.connect_setup(|_, item| {
+        let label = gtk4::Label::new(None);
+        label.set_xalign(0.0);
+        item.set_child(Some(&label));
+    });
+
+    factory.connect_bind(|_, item| {
+        let label = item.child().and_downcast::<gtk4::Label>().unwrap();
+
+        if let Some(obj) = item.item() {
+            if let Some(file_item) = obj.downcast_ref::<FileItem>() {
+                label.set_text(&file_item.mime_type());
+            }
+        }
+    });
+
+    factory
+}
+
+pub fn populate_files_list(file_store: &gio::ListStore, dir: &gio::File, show_hidden: &bool) {
+    file_store.remove_all();
 
     if let Ok(enumerator) =
         dir.enumerate_children("*", gio::FileQueryInfoFlags::NONE, None::<&gio::Cancellable>)
     {
-        while let Some(info) = enumerator.next_file(None::<&gio::Cancellable>).unwrap_or(None) {
-            let name = info.display_name();
+        while let Some(_info) = enumerator.next_file(None::<&gio::Cancellable>).unwrap_or(None) {
+            let name = _info.display_name();
 
             if !show_hidden && name.starts_with('.') {
                 continue;
@@ -226,12 +323,9 @@ pub fn populate_files_list(files_list: &gtk4::StringList, dir: &gio::File, show_
 
             let child_file = dir.child(&name);
 
-            let display = child_file
-                .path()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|| child_file.uri().to_string());
-
-            files_list.append(&display);
+            if let Some(file_item) = FileItem::from_file(&child_file, *show_hidden) {
+                file_store.append(&file_item);
+            }
         }
     }
 }

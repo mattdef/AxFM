@@ -7,7 +7,7 @@ use std::{cell::RefCell, rc::Rc};
 
 pub fn build_sidebar(
     fmstate: Rc<RefCell<FmState>>,
-    files_list: &gtk4::StringList,
+    file_store: &gtk4::gio::ListStore,
 ) -> (GtkBox, SingleSelection) {
     let sidebar_items = get_sidebar_items();
     let labels: Vec<&str> = sidebar_items.iter().map(|(name, _)| *name).collect();
@@ -22,7 +22,7 @@ pub fn build_sidebar(
         #[strong]
         sidebar_items,
         #[weak]
-        files_list,
+        file_store,
         #[strong]
         fmstate,
         move |_, item| {
@@ -50,7 +50,7 @@ pub fn build_sidebar(
                 #[weak_allow_none]
                 label,
                 #[weak_allow_none]
-                files_list,
+                file_store,
                 #[strong]
                 fmstate,
                 move |_drop_target, value, _, _| {
@@ -73,10 +73,10 @@ pub fn build_sidebar(
                                     None::<&mut dyn FnMut(i64, i64)>,
                                 ) {
                                     Ok(_) => {
-                                        if let Some(files_list) = &files_list {
+                                        if let Some(file_store) = &file_store {
                                             let fmstate_ref = fmstate.borrow();
                                             crate::files_panel::populate_files_list(
-                                                files_list,
+                                                file_store,
                                                 &fmstate_ref.current_path,
                                                 &fmstate_ref.settings.show_hidden,
                                             );
@@ -152,15 +152,7 @@ pub fn build_sidebar(
     heading.set_margin_end(12);
     heading.set_xalign(0.0);
 
-    let headerbar = crate::headerbar::build_headerbar();
-
-    // spacer to fill space
-    let spacer = GtkBox::new(Orientation::Horizontal, 0);
-    spacer.set_hexpand(true);
-
     heading_box.append(&heading);
-    heading_box.append(&spacer);
-    heading_box.append(&headerbar);
 
     sidebar_box.append(&heading_box);
     sidebar_box.append(&scroll);
