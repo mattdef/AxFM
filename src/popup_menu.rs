@@ -96,7 +96,17 @@ pub fn get_empty_right_click(
                 let text = obj.string();
 
                 match text.as_str() {
-                    "New Folder" => println!("New Folder clicked"),
+                    "New Folder" => {
+                        let root = popover.root().unwrap();
+                        let parent_window = root.downcast_ref::<gtk4::Window>().unwrap();
+                        let state = fmstate.borrow();
+                        new_folder_dialog(
+                            parent_window,
+                            &state.current_path,
+                            &files_list,
+                            state.settings.show_hidden,
+                        );
+                    }
                     "Paste" => paste_function(fmstate.clone(), &files_list),
                     "Open Terminal Here" => {
                         let terminal_cmd =
@@ -408,6 +418,75 @@ fn rename_file_dialog(
                     }
                 } else {
                     eprintln!("Cannot rename file without a parent directory");
+                }
+            }
+            dialog.close();
+        }
+    ));
+
+    dialog.show();
+}
+
+fn new_folder_dialog(
+    parent_window: &gtk4::Window,
+    current_path: &gio::File,
+    files_list: &gtk4::StringList,
+    show_hidden: bool,
+) {
+    let dialog = gtk4::Dialog::builder()
+        .title("New Folder")
+        .modal(true)
+        .transient_for(parent_window)
+        .build();
+
+    let content_area = dialog.content_area();
+    let entry = gtk4::Entry::new();
+    entry.set_text("New Folder");
+    entry.select_region(0, -1);
+    content_area.append(&entry);
+
+    dialog.add_button("Cancel", gtk4::ResponseType::Cancel);
+    dialog.add_button("Create", gtk4::ResponseType::Ok);
+
+    let current_path_clone = current_path.clone();
+
+    dialog.connect_response(glib::clone!(
+        #[weak]
+        files_list,
+        move |dialog, response| {
+            if response == gtk4::ResponseType::Ok {
+                let folder_name = entry.text().trim().to_string();
+
+                // Validate folder name is not empty
+                if folder_name.is_empty() {
+                    eprintln!("Folder name cannot be empty");
+                    dialog.close();
+                    return;
+                }
+
+                // Validate folder name doesn't contain invalid characters
+                if folder_name.contains('/') || folder_name.contains('\0') {
+                    eprintln!("Folder name contains invalid characters");
+                    dialog.close();
+                    return;
+                }
+
+                // Create the new folder path
+                let new_folder_path = current_path_clone.child(&folder_name);
+
+                // Attempt to create the directory
+                match new_folder_path.make_directory(None::<&gio::Cancellable>) {
+                    Ok(_) => {
+                        // Refresh the file list
+                        files_panel::populate_files_list(
+                            &files_list,
+                            &current_path_clone,
+                            &show_hidden,
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to create folder '{}': {}", folder_name, e);
+                    }
                 }
             }
             dialog.close();
